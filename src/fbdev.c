@@ -488,7 +488,7 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
 	} while (0);
 
         fPtr->shadow24 = FALSE;
-#if HAVE_SHADOW_3224
+#ifdef HAVE_SHADOW_3224
         /* okay but 24bpp is awful */
         if (fbbpp == 24) {
             fPtr->shadow24 = TRUE;
