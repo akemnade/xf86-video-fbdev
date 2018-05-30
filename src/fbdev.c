@@ -951,7 +951,9 @@ FBDevScreenInit(SCREEN_INIT_ARGS_DECL)
 	  xf86DrvMsg(pScrn->scrnIndex, X_INFO, "display rotated; disabling DGA\n");
 	  xf86DrvMsg(pScrn->scrnIndex, X_INFO, "using driver rotation; disabling "
 			                "XRandR\n");
+#if GET_ABI_MAJOR(ABI_VIDEODRV_VERSION) < 24
 	  xf86DisableRandR();
+#endif
 	  if (pScrn->bitsPerPixel == 24)
 	    xf86DrvMsg(pScrn->scrnIndex, X_WARNING, "rotation might be broken at 24 "
                                              "bits per pixel\n");
