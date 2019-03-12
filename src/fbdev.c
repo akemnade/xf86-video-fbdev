@@ -606,7 +606,18 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
 	return TRUE;
 }
 
+static void FBDevEPDUpdate(ScreenPtr pScreen, shadowBufPtr pBuf)
+{
+    RegionPtr damage = shadowDamage(pBuf);
 
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    FBDevPtr fPtr = FBDEVPTR(pScrn);
+    shadowUpdateProc updateproc = fPtr->rotate ?
+                   shadowUpdateRotatePackedWeak() : shadowUpdatePackedWeak();
+    updateproc(pScreen, pBuf);
+
+}
+}
 static Bool
 FBDevCreateScreenResources(ScreenPtr pScreen)
 {
@@ -624,8 +635,7 @@ FBDevCreateScreenResources(ScreenPtr pScreen)
 
     pPixmap = pScreen->GetScreenPixmap(pScreen);
 
-    if (!shadowAdd(pScreen, pPixmap, fPtr->rotate ?
-		   shadowUpdateRotatePackedWeak() : shadowUpdatePackedWeak(),
+    if (!shadowAdd(pScreen, pPixmap, FBDevEPDUpdate,
 		   FBDevWindowLinear, fPtr->rotate, NULL)) {
 	return FALSE;
     }
