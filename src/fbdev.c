@@ -8,6 +8,8 @@
 #endif
 
 #include <string.h>
+#include <sys/ioctl.h>
+#include <linux/mxcfb.h>
 
 /* all driver need this */
 #include "xf86.h"
@@ -18,6 +20,7 @@
 #include "colormapst.h"
 #include "xf86cmap.h"
 #include "shadow.h"
+#include "os.h"
 #include "dgaproc.h"
 
 /* for visuals */
@@ -184,6 +187,9 @@ typedef struct {
 	int				lineLength;
 	int				rotate;
 	Bool				shadowFB;
+	Bool				timerActive;
+	OsTimerPtr			timer;
+	RegionPtr			region_queue;
 	void				*shadow;
 	CloseScreenProcPtr		CloseScreen;
 	CreateScreenResourcesProcPtr	CreateScreenResources;
@@ -606,6 +612,9 @@ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
 	return TRUE;
 }
 
+static CARD32 FBDevEPDUpdateWork(OsTimerPtr timer,
+                                   CARD32 time,
+                                   void *arg);
 static void FBDevEPDUpdate(ScreenPtr pScreen, shadowBufPtr pBuf)
 {
     RegionPtr damage = shadowDamage(pBuf);
@@ -616,8 +625,67 @@ static void FBDevEPDUpdate(ScreenPtr pScreen, shadowBufPtr pBuf)
                    shadowUpdateRotatePackedWeak() : shadowUpdatePackedWeak();
     updateproc(pScreen, pBuf);
 
+    if (fPtr->region_queue) {
+      RegionAppend(fPtr->region_queue, damage);  
+    } else {
+      fPtr->region_queue = RegionDuplicate(damage);
+    }
+
+    if (!fPtr->timerActive) {
+      FBDevEPDUpdateWork(fPtr->timer, GetTimeInMillis(),
+                         pScreen); 
+    }
 }
+
+static CARD32 FBDevEPDUpdateWork(OsTimerPtr timer,
+                                   CARD32 time,
+                                   void *arg)
+{
+    ScreenPtr pScreen = (void *)arg;
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    FBDevPtr fPtr = FBDEVPTR(pScrn);
+    BoxPtr pbox;
+    Bool overlap;
+    int nbox;
+    int fd = fbdevHWGetFD(pScrn);
+    if (fPtr->region_queue == NULL) {
+      fPtr->timerActive = FALSE; 
+      return 0;
+    }
+
+    struct mxcfb_update_data_v1_ntx upd_region;
+    RegionValidate(fPtr->region_queue, &overlap);
+    pbox = RegionRects(fPtr->region_queue);
+    nbox = RegionNumRects(fPtr->region_queue);
+
+    while(nbox--) {
+        int x, y, w, h;
+        int ret;
+        x = pbox->x1;
+        y = pbox->y1;
+        w = (pbox->x2 - pbox->x1);
+        h = pbox->y2 - pbox->y1;
+        memset(&upd_region, 0, sizeof(upd_region));
+        upd_region.update_region.left = x;
+        upd_region.update_region.top = y;
+        upd_region.update_region.width = w;
+        upd_region.update_region.height = h;
+        upd_region.waveform_mode = WAVEFORM_MODE_AUTO;
+        upd_region.temp = TEMP_USE_AMBIENT;
+        upd_region.update_mode = UPDATE_MODE_PARTIAL;
+        upd_region.flags = 0;
+        ret = ioctl(fd, MXCFB_SEND_UPDATE_V1_NTX, &upd_region);
+        if (ret < 0) 
+          xf86DrvMsg(pScrn->scrnIndex, X_ERROR,"update ioctl failed: %d\n", ret);
+        pbox++;
+    }
+    fPtr->timer = TimerSet(timer, 0, 1000, FBDevEPDUpdateWork, pScreen);
+    fPtr->timerActive = TRUE;
+    RegionDestroy(fPtr->region_queue);
+    fPtr->region_queue = NULL; 
+    return 0;
 }
+
 static Bool
 FBDevCreateScreenResources(ScreenPtr pScreen)
 {
