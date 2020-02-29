@@ -653,7 +653,7 @@ static CARD32 FBDevEPDUpdateWork(OsTimerPtr timer,
       return 0;
     }
 
-    struct mxcfb_update_data_v1_ntx upd_region;
+    struct mxcfb_update_data upd_region;
     RegionValidate(fPtr->region_queue, &overlap);
     pbox = RegionRects(fPtr->region_queue);
     nbox = RegionNumRects(fPtr->region_queue);
@@ -674,7 +674,7 @@ static CARD32 FBDevEPDUpdateWork(OsTimerPtr timer,
         upd_region.temp = TEMP_USE_AMBIENT;
         upd_region.update_mode = UPDATE_MODE_PARTIAL;
         upd_region.flags = 0;
-        ret = ioctl(fd, MXCFB_SEND_UPDATE_V1_NTX, &upd_region);
+        ret = ioctl(fd, MXCFB_SEND_UPDATE, &upd_region);
         if (ret < 0) 
           xf86DrvMsg(pScrn->scrnIndex, X_ERROR,"update ioctl failed: %d\n", ret);
         pbox++;
